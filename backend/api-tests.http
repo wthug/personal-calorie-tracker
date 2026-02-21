@@ -1,0 +1,135 @@
+### Setup Instructions
+# 1. Install the "REST Client" extension in VS Code
+# 2. Make sure your server is running (npm run dev)
+# 3. Send the POST request to Register or Login first
+# 4. Copy the "token" from the response
+# 5. Paste the token into the @token variable below:
+
+@baseUrl = http://localhost:5000
+@token = paste_your_jwt_token_here_after_login
+
+### ========================================
+### 1. auth / USERS API
+### ========================================
+
+### Register a new user
+POST {{baseUrl}}/users/add
+Content-Type: application/json
+
+{
+  "username": "testuser_api",
+  "password": "securepassword123"
+}
+
+###
+
+### Login (Get JWT Token)
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "username": "testuser_api",
+  "password": "securepassword123"
+}
+
+### ========================================
+### 2. GOALS API
+### ========================================
+
+### Setup or Update User Goal
+POST {{baseUrl}}/goals
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "dailyCalorieTarget": 2500,
+    "proteinTarget": 150,
+    "carbTarget": 200,
+    "fatTarget": 70,
+    "weightGoal": 75
+}
+
+###
+
+### Get User Goal
+GET {{baseUrl}}/goals
+Authorization: Bearer {{token}}
+
+
+### ========================================
+### 3. MEALS API
+### ========================================
+
+### Add a new Meal with Food Items
+POST {{baseUrl}}/meals/add
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+    "mealType": "lunch",
+    "date": "2026-02-21",
+    "foodItems": [
+        {
+            "name": "Grilled Chicken Breast",
+            "quantity": "200g",
+            "calories": 330,
+            "protein": 62,
+            "carbs": 0,
+            "fat": 7
+        },
+        {
+            "name": "Brown Rice",
+            "quantity": "1 cup",
+            "calories": 216,
+            "protein": 5,
+            "carbs": 45,
+            "fat": 2
+        }
+    ]
+}
+
+###
+
+### Get All Meals (No filters)
+GET {{baseUrl}}/meals
+Authorization: Bearer {{token}}
+
+###
+
+### Get Meals (Filtered by mealType)
+GET {{baseUrl}}/meals?mealType=lunch
+Authorization: Bearer {{token}}
+
+###
+
+### Get Meals (Filtered by Date Range)
+GET {{baseUrl}}/meals?startDate=2026-02-20&endDate=2026-02-22
+Authorization: Bearer {{token}}
+
+
+### ========================================
+### 4. REPORTS API
+### ========================================
+
+### Get Today's Goal vs Actual Comparison
+GET {{baseUrl}}/reports/today
+Authorization: Bearer {{token}}
+
+###
+
+### Get Weekly Trend (Grouped by Day)
+GET {{baseUrl}}/reports/weekly
+Authorization: Bearer {{token}}
+
+
+### ========================================
+### 5. AI API
+### ========================================
+
+### Test AI Image Analysis
+### Note: This requires a multipart form-data upload which is tricky in raw HTTP files.
+### In Postman: 
+### 1. Method: POST -> http://localhost:5000/ai/analyze-food
+### 2. Headers -> Authorization: Bearer <your_token>
+### 3. Body -> form-data
+### 4. Key: "image" (Set type to File) -> Select an image

@@ -32,9 +32,15 @@ if (uri) {
 // Routes setup
 const usersRouter = require('./routes/users');
 const mealsRouter = require('./routes/meals');
+const goalsRouter = require('./routes/goals');
+const reportsRouter = require('./routes/reports');
+const aiRouter = require('./routes/ai');
 
 app.use('/users', usersRouter);
 app.use('/meals', mealsRouter);
+app.use('/goals', goalsRouter);
+app.use('/reports', reportsRouter);
+app.use('/ai', aiRouter);
 
 // Basic route for testing
 app.get('/', (req, res) => {
