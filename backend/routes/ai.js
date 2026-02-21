@@ -23,7 +23,9 @@ router.route('/analyze-food').post(upload.single('image'), async (req, res) => {
                     calories: 95,
                     protein: 0.5,
                     carbs: 25,
-                    fat: 0.3
+                    fat: 0.3,
+                    vitamins: { a: 54, c: 8.4, d: 0 },
+                    minerals: { iron: 0.1, calcium: 6, magnesium: 5 }
                 },
                 {
                     name: "Mock Analyzed Banana",
@@ -31,7 +33,9 @@ router.route('/analyze-food').post(upload.single('image'), async (req, res) => {
                     calories: 121,
                     protein: 1.5,
                     carbs: 31,
-                    fat: 0.4
+                    fat: 0.4,
+                    vitamins: { a: 76, c: 11.8, d: 0 },
+                    minerals: { iron: 0.3, calcium: 6, magnesium: 32 }
                 }
             ]);
         }
@@ -40,15 +44,23 @@ router.route('/analyze-food').post(upload.single('image'), async (req, res) => {
 
         const prompt = `Analyze this image of food or a nutrition label. 
 Please identify the individual food items or the product information.
-Return ONLY a strictly valid JSON array of objects with the following keys and appropriate guessed values:
+Return ONLY a strictly valid JSON array of objects with the following keys and appropriate guessed values. Ensure nested objects are accurately structured:
 - "name" (String): The name of the food item
 - "quantity" (String): The estimated quantity (e.g. "1 bowl", "100g")
 - "calories" (Number): Estimated total calories
 - "protein" (Number): Estimated total protein in grams
 - "carbs" (Number): Estimated total carbohydrates in grams
 - "fat" (Number): Estimated total fat in grams
+- "vitamins" (Object):
+    - "a" (Number): Estimated Vitamin A
+    - "c" (Number): Estimated Vitamin C
+    - "d" (Number): Estimated Vitamin D
+- "minerals" (Object):
+    - "iron" (Number): Estimated Iron
+    - "calcium" (Number): Estimated Calcium
+    - "magnesium" (Number): Estimated Magnesium
 
-Do not wrap the response in markdown blocks like \`\`\`json. Return strictly the unformatted JSON array string.`;
+If a value cannot be reasonably estimated, default it to 0. Do not wrap the response in markdown blocks like \`\`\`json. Return strictly the unformatted JSON array string.`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',

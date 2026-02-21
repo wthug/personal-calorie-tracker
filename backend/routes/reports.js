@@ -43,7 +43,13 @@ router.route('/weekly').get(async (req, res) => {
                     totalCalories: { $sum: "$calories" },
                     totalProtein: { $sum: "$protein" },
                     totalCarbs: { $sum: "$carbs" },
-                    totalFat: { $sum: "$fat" }
+                    totalFat: { $sum: "$fat" },
+                    totalVitA: { $sum: "$vitamins.a" },
+                    totalVitC: { $sum: "$vitamins.c" },
+                    totalVitD: { $sum: "$vitamins.d" },
+                    totalIron: { $sum: "$minerals.iron" },
+                    totalCalcium: { $sum: "$minerals.calcium" },
+                    totalMagnesium: { $sum: "$minerals.magnesium" }
                 }
             },
             {
@@ -99,7 +105,13 @@ router.route('/today').get(async (req, res) => {
                     consumedCalories: { $sum: "$calories" },
                     consumedProtein: { $sum: "$protein" },
                     consumedCarbs: { $sum: "$carbs" },
-                    consumedFat: { $sum: "$fat" }
+                    consumedFat: { $sum: "$fat" },
+                    consumedVitA: { $sum: "$vitamins.a" },
+                    consumedVitC: { $sum: "$vitamins.c" },
+                    consumedVitD: { $sum: "$vitamins.d" },
+                    consumedIron: { $sum: "$minerals.iron" },
+                    consumedCalcium: { $sum: "$minerals.calcium" },
+                    consumedMagnesium: { $sum: "$minerals.magnesium" }
                 }
             }
         ]);
@@ -109,7 +121,13 @@ router.route('/today').get(async (req, res) => {
             consumedCalories: 0,
             consumedProtein: 0,
             consumedCarbs: 0,
-            consumedFat: 0
+            consumedFat: 0,
+            consumedVitA: 0,
+            consumedVitC: 0,
+            consumedVitD: 0,
+            consumedIron: 0,
+            consumedCalcium: 0,
+            consumedMagnesium: 0
         };
 
         res.json({
@@ -122,6 +140,47 @@ router.route('/today').get(async (req, res) => {
             actual: actuals
         });
 
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// Fetching today's trend by meal type
+router.route('/today-trend').get(async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const todayData = await FoodItem.aggregate([
+            {
+                $lookup: {
+                    from: 'meals',
+                    localField: 'meal',
+                    foreignField: '_id',
+                    as: 'mealDetails'
+                }
+            },
+            { $unwind: '$mealDetails' },
+            {
+                $match: {
+                    'mealDetails.user': new mongoose.Types.ObjectId(userId),
+                    'mealDetails.date': { $gte: startOfDay, $lte: endOfDay }
+                }
+            },
+            {
+                $group: {
+                    _id: "$mealDetails.mealType",
+                    totalCalories: { $sum: "$calories" }
+                }
+            }
+        ]);
+
+        res.json(todayData);
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
