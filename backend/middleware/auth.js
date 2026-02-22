@@ -4,7 +4,7 @@ const authMiddleware = (req, res, next) => {
 
     const openPaths = ['/users/login', '/users/add'];
     if (openPaths.includes(req.path)) {
-        return next(); 
+        return next();
     }
 
     const authHeader = req.headers['authorization'];
@@ -20,6 +20,7 @@ const authMiddleware = (req, res, next) => {
         req.user = decoded;
         next();
     } catch (error) {
+        console.error("JWT Verification failed:", error.message);
         res.status(403).json({ message: 'Invalid or expired token.' });
     }
 };

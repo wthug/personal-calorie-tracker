@@ -57,13 +57,11 @@ router.route('/weekly').get(async (req, res) => {
             }
         ]);
 
-        const goal = await Goal.findOne({ user: userId });
+        const goalsList = await Goal.find({ user: userId }).sort({ date: 1 });
 
         let processedWeeklyData = weeklyData;
-        if (goal && goal.history && goal.history.length > 0) {
-            // Ensure history is sorted by date ascending
-            const sortedHistory = goal.history.sort((a, b) => new Date(a.date) - new Date(b.date));
 
+        if (goalsList && goalsList.length > 0) {
             processedWeeklyData = weeklyData.map(day => {
                 const [year, month, d] = day._id.split('-');
                 const dayDate = new Date(year, month - 1, d);
@@ -71,34 +69,32 @@ router.route('/weekly').get(async (req, res) => {
 
                 let activeTarget = null;
 
-                // Scan backward to find the most recent goal active on or before this day
-                for (let i = sortedHistory.length - 1; i >= 0; i--) {
-                    const hDate = new Date(sortedHistory[i].date);
-                    hDate.setHours(0, 0, 0, 0);
+                // Scan backward to find the most recent isolated Goal document active on or before this day
+                for (let i = goalsList.length - 1; i >= 0; i--) {
+                    const goalDate = new Date(goalsList[i].date);
+                    goalDate.setHours(0, 0, 0, 0);
 
-                    if (hDate.getTime() <= dayDate.getTime()) {
-                        activeTarget = sortedHistory[i].dailyCalorieTarget;
+                    if (goalDate.getTime() <= dayDate.getTime()) {
+                        activeTarget = goalsList[i].dailyCalorieTarget;
                         break;
                     }
                 }
 
                 // If no goal was active at that time (e.g. before registering), use the oldest known goal
-                if (activeTarget === null && sortedHistory.length > 0) {
-                    activeTarget = sortedHistory[0].dailyCalorieTarget;
-                } else if (activeTarget === null) {
-                    activeTarget = goal.dailyCalorieTarget;
+                if (activeTarget === null && goalsList.length > 0) {
+                    activeTarget = goalsList[0].dailyCalorieTarget;
                 }
 
                 return {
                     ...day,
-                    targetCalories: activeTarget
+                    targetCalories: activeTarget || 0
                 };
             });
         } else {
-            // If no history, fallback to current active goal uniformly
+            // If completely empty history
             processedWeeklyData = weeklyData.map(day => ({
                 ...day,
-                targetCalories: goal ? goal.dailyCalorieTarget : 0
+                targetCalories: 0
             }));
         }
 
@@ -113,15 +109,15 @@ router.route('/today').get(async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Fetch user's active goal
-        const goal = await Goal.findOne({ user: userId });
-
         // Calculate today's start and end times
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
 
         const endOfDay = new Date();
         endOfDay.setHours(23, 59, 59, 999);
+
+        // Fetch user's active goal (most recent one up to the end of today)
+        const goal = await Goal.findOne({ user: userId, date: { $lte: endOfDay } }).sort({ date: -1 });
 
         // Aggregate totals for today
         const todaysTotals = await FoodItem.aggregate([

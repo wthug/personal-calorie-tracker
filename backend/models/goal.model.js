@@ -6,7 +6,11 @@ const goalSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true,
-            unique: true,
+        },
+
+        date: {
+            type: Date,
+            required: true,
         },
 
         dailyCalorieTarget: {
@@ -20,15 +24,10 @@ const goalSchema = new mongoose.Schema(
 
         weightGoal: Number,
 
-        history: [{
-            date: { type: Date, required: true },
-            dailyCalorieTarget: Number,
-            proteinTarget: Number,
-            carbTarget: Number,
-            fatTarget: Number,
-        }]
     },
     { timestamps: true }
 );
+
+goalSchema.index({ user: 1, date: 1 }, { unique: true });
 
 module.exports = mongoose.model("Goal", goalSchema);
