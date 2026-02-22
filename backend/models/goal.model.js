@@ -6,7 +6,7 @@ const goalSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true,
-            unique: true, 
+            unique: true,
         },
 
         dailyCalorieTarget: {
@@ -18,7 +18,15 @@ const goalSchema = new mongoose.Schema(
         carbTarget: Number,
         fatTarget: Number,
 
-        weightGoal: Number, 
+        weightGoal: Number,
+
+        history: [{
+            date: { type: Date, required: true },
+            dailyCalorieTarget: Number,
+            proteinTarget: Number,
+            carbTarget: Number,
+            fatTarget: Number,
+        }]
     },
     { timestamps: true }
 );

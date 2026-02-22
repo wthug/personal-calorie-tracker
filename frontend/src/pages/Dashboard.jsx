@@ -35,6 +35,22 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
+import { format } from "date-fns";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 
 // Register Chart.js components
 ChartJS.register(
@@ -74,7 +90,11 @@ export default function Dashboard() {
     // Dashboard Data State
     const [dailyGoal, setDailyGoal] = useState({});
     const [todayActuals, setTodayActuals] = useState({});
-    const [recentMeals, setRecentMeals] = useState([]);
+
+    // Pagination & Filtering State
+    const [paginatedFoodItems, setPaginatedFoodItems] = useState([]);
+    const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+    const [dateRange, setDateRange] = useState({ from: undefined, to: undefined });
 
     // Chart Data State
     const [weeklyData, setWeeklyData] = useState([]);
@@ -97,20 +117,25 @@ export default function Dashboard() {
         buildCharts();
     }, [weeklyData, todayActuals, dailyGoal, showMacroWeekly, showMicroWeekly, todayTrendData]);
 
+    useEffect(() => {
+        if (dailyGoal && dailyGoal.targetCalories) {
+            setGoalTargetCalories(dailyGoal.targetCalories);
+            setGoalTargetProtein(dailyGoal.targetProtein || 0);
+            setGoalTargetCarbs(dailyGoal.targetCarbs || 0);
+            setGoalTargetFat(dailyGoal.targetFat || 0);
+        }
+    }, [dailyGoal]);
+
     const fetchDashboardData = async () => {
         try {
-            const [todayRes, mealsRes, weeklyRes, todayTrendRes] = await Promise.all([
+            const [todayRes, weeklyRes, todayTrendRes] = await Promise.all([
                 api.get("/reports/today"),
-                api.get("/meals"),
                 api.get("/reports/weekly"),
                 api.get("/reports/today-trend"),
             ]);
 
             setDailyGoal(todayRes.data.goal);
             setTodayActuals(todayRes.data.actual);
-
-            // Load recent meals (limited to latest 5)
-            setRecentMeals(mealsRes.data.slice(0, 5));
 
             setWeeklyData(weeklyRes.data);
             setTodayTrendData(todayTrendRes.data);
@@ -122,6 +147,32 @@ export default function Dashboard() {
             }
         }
     };
+
+    const fetchFoodItems = async () => {
+        try {
+            const params = { page: pagination.page, limit: 10 };
+            if (dateRange?.from) {
+                const fromDate = new Date(dateRange.from);
+                fromDate.setHours(0, 0, 0, 0);
+                params.startDate = fromDate.toISOString();
+            }
+            if (dateRange?.to) {
+                const toDate = new Date(dateRange.to);
+                toDate.setHours(23, 59, 59, 999);
+                params.endDate = toDate.toISOString();
+            }
+
+            const res = await api.get("/meals/food-items", { params });
+            setPaginatedFoodItems(res.data.foodItems);
+            setPagination(res.data.pagination);
+        } catch (err) {
+            console.error("Error fetching food items", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchFoodItems();
+    }, [pagination.page, dateRange]);
 
     const buildCharts = () => {
         // 1. Weekly Calorie Trend (Line Chart)
@@ -146,7 +197,7 @@ export default function Dashboard() {
                     },
                     {
                         label: "Daily Target",
-                        data: Array(weeklyData.length).fill(dailyGoal.targetCalories || 0),
+                        data: weeklyData.map(d => d.targetCalories || dailyGoal.targetCalories || 0),
                         borderColor: "rgba(156, 163, 175, 1)", // Tailwind gray-400
                         borderDash: [5, 5],
                         pointRadius: 0,
@@ -280,10 +331,10 @@ export default function Dashboard() {
         setIsSavingGoal(true);
         try {
             await api.post("/goals", {
-                targetCalories: parseInt(goalTargetCalories),
-                targetProtein: parseInt(goalTargetProtein),
-                targetCarbs: parseInt(goalTargetCarbs),
-                targetFat: parseInt(goalTargetFat),
+                dailyCalorieTarget: parseInt(goalTargetCalories),
+                proteinTarget: parseInt(goalTargetProtein),
+                carbTarget: parseInt(goalTargetCarbs),
+                fatTarget: parseInt(goalTargetFat),
             });
             setIsGoalOpen(false);
             fetchDashboardData();
@@ -317,8 +368,8 @@ export default function Dashboard() {
             });
 
             const analysis = response.data;
-            if (analysis.extractedItems && analysis.extractedItems.length > 0) {
-                setFoodItems(analysis.extractedItems);
+            if (Array.isArray(analysis) && analysis.length > 0) {
+                setFoodItems(analysis);
             }
         } catch (err) {
             console.error("AI Analysis failed:", err);
@@ -626,40 +677,134 @@ export default function Dashboard() {
                     </Card>
 
                     <Card>
-                        <CardHeader>
-                            <CardTitle className="text-xl">Recent Logging</CardTitle>
+                        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-border gap-4">
+                            <CardTitle className="text-xl shrink-0">Food Log</CardTitle>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-[150px] justify-start text-left font-normal",
+                                                !dateRange?.from && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {dateRange?.from ? format(dateRange.from, "LLL dd, y") : <span>Start Date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            selected={dateRange?.from}
+                                            onSelect={(date) => {
+                                                setDateRange(prev => ({ ...prev, from: date }));
+                                                setPagination(prev => ({ ...prev, page: 1 }));
+                                            }}
+                                            initialFocus
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+
+                                <span className="text-muted-foreground text-sm">to</span>
+
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                                "w-[150px] justify-start text-left font-normal",
+                                                !dateRange?.to && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {dateRange?.to ? format(dateRange.to, "LLL dd, y") : <span>End Date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            selected={dateRange?.to}
+                                            onSelect={(date) => {
+                                                setDateRange(prev => ({ ...prev, to: date }));
+                                                setPagination(prev => ({ ...prev, page: 1 }));
+                                            }}
+                                            initialFocus
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+
+                                {(dateRange?.from || dateRange?.to) && (
+                                    <Button
+                                        variant="ghost"
+                                        className="h-9 px-3 text-muted-foreground hover:text-foreground"
+                                        onClick={() => {
+                                            setDateRange({ from: undefined, to: undefined });
+                                            setPagination(prev => ({ ...prev, page: 1 }));
+                                        }}
+                                    >
+                                        Clear
+                                    </Button>
+                                )}
+                            </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="pt-6">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Type</TableHead>
+                                        <TableHead>Food</TableHead>
                                         <TableHead>Date</TableHead>
-                                        <TableHead>Cal</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead className="text-right">Cal</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {recentMeals.length > 0 ? (
-                                        recentMeals.map((meal) => (
-                                            <TableRow key={meal._id}>
-                                                <TableCell className="font-medium capitalize">{meal.mealType}</TableCell>
+                                    {paginatedFoodItems.length > 0 ? (
+                                        paginatedFoodItems.map((item) => (
+                                            <TableRow key={item._id}>
+                                                <TableCell className="font-medium">{item.name}</TableCell>
                                                 <TableCell>
-                                                    {new Date(meal.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                    {new Date(item.mealDetails.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                                 </TableCell>
-                                                <TableCell>
-                                                    {meal.foodItems.reduce((sum, item) => sum + (item.calories || 0), 0)}
-                                                </TableCell>
+                                                <TableCell className="capitalize text-muted-foreground">{item.mealDetails.mealType}</TableCell>
+                                                <TableCell className="text-right font-semibold">{item.calories}</TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={3} className="text-center text-muted-foreground py-4">
-                                                No recent meals logged.
+                                            <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                                No food items found matching criteria.
                                             </TableCell>
                                         </TableRow>
                                     )}
                                 </TableBody>
                             </Table>
+
+                            {pagination.totalPages > 1 && (
+                                <div className="mt-4 border-t border-border pt-4">
+                                    <Pagination>
+                                        <PaginationContent>
+                                            <PaginationItem>
+                                                <PaginationPrevious
+                                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+                                                    className={pagination.page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                                />
+                                            </PaginationItem>
+                                            <PaginationItem>
+                                                <span className="text-sm text-muted-foreground px-4">
+                                                    Page {pagination.page} of {pagination.totalPages}
+                                                </span>
+                                            </PaginationItem>
+                                            <PaginationItem>
+                                                <PaginationNext
+                                                    onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
+                                                    className={pagination.page === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                                />
+                                            </PaginationItem>
+                                        </PaginationContent>
+                                    </Pagination>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>

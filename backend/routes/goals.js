@@ -28,19 +28,51 @@ router.route('/').post(async (req, res) => {
             weightGoal
         } = req.body;
 
-        // Upsert: Find the document to update. If it doesn't exist, create it.
-        const goal = await Goal.findOneAndUpdate(
-            { user: userId },
-            {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const snapshot = {
+            date: today,
+            dailyCalorieTarget,
+            proteinTarget,
+            carbTarget,
+            fatTarget
+        };
+
+        let goal = await Goal.findOne({ user: userId });
+
+        if (goal) {
+            goal.dailyCalorieTarget = dailyCalorieTarget;
+            goal.proteinTarget = proteinTarget;
+            goal.carbTarget = carbTarget;
+            goal.fatTarget = fatTarget;
+            goal.weightGoal = weightGoal;
+
+            // Update today's snapshot if it exists, otherwise push a new one
+            const existingIndex = goal.history.findIndex(h => {
+                const hDate = new Date(h.date);
+                hDate.setHours(0, 0, 0, 0);
+                return hDate.getTime() === today.getTime();
+            });
+
+            if (existingIndex >= 0) {
+                goal.history[existingIndex] = snapshot;
+            } else {
+                goal.history.push(snapshot);
+            }
+            await goal.save();
+        } else {
+            goal = new Goal({
                 user: userId,
                 dailyCalorieTarget,
                 proteinTarget,
                 carbTarget,
                 fatTarget,
-                weightGoal
-            },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
+                weightGoal,
+                history: [snapshot]
+            });
+            await goal.save();
+        }
 
         res.status(200).json({
             message: 'Goal saved successfully!',

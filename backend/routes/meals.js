@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const mongoose = require('mongoose');
 const Meal = require('../models/meal.model');
 const FoodItem = require('../models/foodItem.model');
 
@@ -37,6 +38,68 @@ router.route('/add').post(async (req, res) => {
     }
 });
 
+// GET request: Fetch paginated food items with optional date filters
+router.route('/food-items').get(async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { startDate, endDate, page = 1, limit = 10 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        let dateMatch = {};
+        if (startDate || endDate) {
+            if (startDate) {
+                dateMatch.$gte = new Date(new Date(startDate).setHours(0, 0, 0, 0));
+            }
+            if (endDate) {
+                dateMatch.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+            }
+        }
+
+        const pipeline = [
+            {
+                $lookup: {
+                    from: 'meals',
+                    localField: 'meal',
+                    foreignField: '_id',
+                    as: 'mealDetails'
+                }
+            },
+            { $unwind: '$mealDetails' },
+            {
+                $match: {
+                    'mealDetails.user': new mongoose.Types.ObjectId(userId),
+                    ...(Object.keys(dateMatch).length > 0 ? { 'mealDetails.date': dateMatch } : {})
+                }
+            },
+            { $sort: { 'mealDetails.date': -1, createdAt: -1 } }
+        ];
+
+        const results = await FoodItem.aggregate([
+            {
+                $facet: {
+                    metadata: [...pipeline, { $count: "total" }],
+                    data: [...pipeline, { $skip: skip }, { $limit: parseInt(limit) }]
+                }
+            }
+        ]);
+
+        const total = results[0].metadata[0] ? results[0].metadata[0].total : 0;
+        const totalPages = Math.ceil(total / parseInt(limit));
+
+        res.json({
+            foodItems: results[0].data,
+            pagination: {
+                total,
+                page: parseInt(page),
+                totalPages,
+                limit: parseInt(limit)
+            }
+        });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
 // GET request: Fetch meals for the logged in user with optional filters
 router.route('/').get(async (req, res) => {
     try {
@@ -64,8 +127,22 @@ router.route('/').get(async (req, res) => {
             query.mealType = mealType;
         }
 
-        // Find meals matching the query and sort by date (newest first)
-        const meals = await Meal.find(query).sort({ date: -1 });
+        // Convert userId to ObjectId for aggregation $match
+        query.user = new mongoose.Types.ObjectId(userId);
+
+        // Find meals matching the query and join with FoodItems
+        const meals = await Meal.aggregate([
+            { $match: query },
+            { $sort: { date: -1 } },
+            {
+                $lookup: {
+                    from: "fooditems",
+                    localField: "_id",
+                    foreignField: "meal",
+                    as: "foodItems"
+                }
+            }
+        ]);
 
         res.json(meals);
     } catch (err) {

@@ -57,7 +57,52 @@ router.route('/weekly').get(async (req, res) => {
             }
         ]);
 
-        res.json(weeklyData);
+        const goal = await Goal.findOne({ user: userId });
+
+        let processedWeeklyData = weeklyData;
+        if (goal && goal.history && goal.history.length > 0) {
+            // Ensure history is sorted by date ascending
+            const sortedHistory = goal.history.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            processedWeeklyData = weeklyData.map(day => {
+                const [year, month, d] = day._id.split('-');
+                const dayDate = new Date(year, month - 1, d);
+                dayDate.setHours(0, 0, 0, 0);
+
+                let activeTarget = null;
+
+                // Scan backward to find the most recent goal active on or before this day
+                for (let i = sortedHistory.length - 1; i >= 0; i--) {
+                    const hDate = new Date(sortedHistory[i].date);
+                    hDate.setHours(0, 0, 0, 0);
+
+                    if (hDate.getTime() <= dayDate.getTime()) {
+                        activeTarget = sortedHistory[i].dailyCalorieTarget;
+                        break;
+                    }
+                }
+
+                // If no goal was active at that time (e.g. before registering), use the oldest known goal
+                if (activeTarget === null && sortedHistory.length > 0) {
+                    activeTarget = sortedHistory[0].dailyCalorieTarget;
+                } else if (activeTarget === null) {
+                    activeTarget = goal.dailyCalorieTarget;
+                }
+
+                return {
+                    ...day,
+                    targetCalories: activeTarget
+                };
+            });
+        } else {
+            // If no history, fallback to current active goal uniformly
+            processedWeeklyData = weeklyData.map(day => ({
+                ...day,
+                targetCalories: goal ? goal.dailyCalorieTarget : 0
+            }));
+        }
+
+        res.json(processedWeeklyData);
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -70,10 +115,6 @@ router.route('/today').get(async (req, res) => {
 
         // Fetch user's active goal
         const goal = await Goal.findOne({ user: userId });
-
-        if (!goal) {
-            return res.status(404).json({ message: 'Setup your goals first to view comparison.' });
-        }
 
         // Calculate today's start and end times
         const startOfDay = new Date();
@@ -131,12 +172,12 @@ router.route('/today').get(async (req, res) => {
         };
 
         res.json({
-            goal: {
+            goal: goal ? {
                 targetCalories: goal.dailyCalorieTarget,
                 targetProtein: goal.proteinTarget || 0,
                 targetCarbs: goal.carbTarget || 0,
                 targetFat: goal.fatTarget || 0
-            },
+            } : {},
             actual: actuals
         });
 
